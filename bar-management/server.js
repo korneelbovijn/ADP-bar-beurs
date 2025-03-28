@@ -7,6 +7,10 @@ const WebSocket = require('ws');
 const app = express();
 const port = process.env.PORT || 5000;
 
+let crashActive = false;
+let preCrashPrices = new Map(); // BarItem_ID → originele prijs
+
+
 
 // Database connectief
 const pool = new Pool({
@@ -20,53 +24,94 @@ const pool = new Pool({
 
 
 async function updatePrices() {
-    try {
-      const result = await pool.query(`
-        SELECT id, naam, minimumprijs, maximumprijs, 
-               COALESCE(
-                 (SELECT prijs FROM baritemprijsdetail pid 
-                  JOIN baritemprijs p ON pid.baritemprijs_id = p.id 
-                  WHERE pid.baritem_id = b.id 
-                  ORDER BY p.datumtijd DESC LIMIT 1),
-                 b.minimumprijs
-               ) AS laatsteprijs
-        FROM baritem b;
-      `);
-  
-      const currentTimestamp = new Date();
-      const roundedTimestamp = currentTimestamp; // new Date(Math.round(currentTimestamp.getTime() / 1000) * 1000);
-  
-      // Maak één prijsset aan voor deze update
-      const prijsSet = await pool.query(
-        "INSERT INTO baritemprijs (datumtijd) VALUES ($1) RETURNING id",
-        [roundedTimestamp]
-      );
-      const prijsSetID = prijsSet.rows[0].id;
-  
-      for (const item of result.rows) {
-        let newPrice = item.laatsteprijs;
-        if (isNaN(newPrice) || newPrice === null) {
-          newPrice = item.minimumprijs;
-        }
-  
-        const changePercentage = 0.1;
-        const increase = Math.random() > 0.5;
-        newPrice = increase
-          ? newPrice * (1 + changePercentage)
-          : newPrice * (1 - changePercentage);
-  
-        newPrice = Math.max(item.minimumprijs, Math.min(newPrice, item.maximumprijs));
-        newPrice = parseFloat(newPrice.toFixed(2));
-  
-        await pool.query(`
-          INSERT INTO baritemprijsdetail (baritem_id, prijs, baritemprijs_id)
-          VALUES ($1, $2, $3)
-        `, [item.id, newPrice, prijsSetID]);
-      }
-    } catch (err) {
-      console.error("Error bij het updaten van prijzen:", err.message);
+    if (crashActive) {
+        console.log("🚫 Prijsupdate geblokkeerd wegens actieve crash");
+        return;
     }
-  }
+
+    try {
+        const verkoopTijdspanne = 30; // Laatste 30 minuten
+
+        // Stap 1: Haal verkoopgegevens van de laatste X minuten op
+        const verkopen = await pool.query(`
+            SELECT bi.id, COALESCE(SUM(bvi.aantal), 0) AS totaal_verkocht
+            FROM baritem bi
+            LEFT JOIN barverkoopitem bvi ON bi.id = bvi.baritem_id
+            LEFT JOIN barverkoop b ON bvi.barverkoop_id = b.id AND b.datumtijd >= NOW() - INTERVAL '${verkoopTijdspanne} minutes'
+            GROUP BY bi.id
+            ORDER BY totaal_verkocht ASC;
+        `);
+
+        const verkochteItems = verkopen.rows;
+        if (verkochteItems.length === 0) {
+            console.log("⚠️ Geen verkopen in de laatste 30 minuten. Prijzen blijven ongewijzigd.");
+            return;
+        }
+
+        const totalItems = verkochteItems.length;
+
+        // Stap 2: Haal de huidige prijzen van alle items op
+        const huidigePrijzen = await pool.query(`
+            SELECT id, naam, minimumprijs, maximumprijs, huidigeprijs as laatsteprijs 
+            FROM baritem
+        `);
+
+        const prijzenMap = new Map(huidigePrijzen.rows.map(item => [item.id, item]));
+
+        // Stap 3: Maak een nieuwe prijsgeschiedenis set aan
+        const currentTimestamp = new Date();
+        const prijsSet = await pool.query(
+            "INSERT INTO baritemprijs (datumtijd) VALUES ($1) RETURNING id",
+            [currentTimestamp]
+        );
+        const prijsSetID = prijsSet.rows[0].id;
+
+        // Stap 4: Bereken nieuwe prijzen
+        for (let i = 0; i < totalItems; i++) {
+            const item = verkochteItems[i];
+            const itemData = prijzenMap.get(item.id);
+            if (!itemData) continue;
+
+            const huidigePrijs = parseFloat(itemData.laatsteprijs) || itemData.minimumprijs;
+            let nieuwePrijs = huidigePrijs;
+            let basisVerandering = itemData.maximumprijs - itemData.minimumprijs;
+
+            // **Bepaal de aanpassingsfactor afhankelijk van de positie in de lijst**
+            const normalisedIndex = i / (totalItems - 1 || 1); // Waarde tussen 0 en 1
+            const extremeFactor = Math.abs(Math.cos(normalisedIndex * Math.PI)); 
+            // Dit geeft een hoge waarde aan het begin en eind, en een lage waarde in het midden
+
+            const maxVariatie = basisVerandering * 0.2; // Max 20% variatie
+
+            if (i < totalItems / 2) {
+                // Onderste helft → prijs dalen
+                const daling = maxVariatie * extremeFactor; 
+                nieuwePrijs = Math.max(huidigePrijs - daling, itemData.minimumprijs);
+            } else {
+                // Bovenste helft → prijs stijgen
+                const stijging = maxVariatie * extremeFactor; 
+                nieuwePrijs = Math.min(huidigePrijs + stijging, itemData.maximumprijs);
+            }
+
+            // Stap 5: Sla de nieuwe prijs op in `baritemprijsdetail`
+            await pool.query(
+                "INSERT INTO baritemprijsdetail (baritem_id, prijs, baritemprijs_id) VALUES ($1, $2, $3)",
+                [item.id, nieuwePrijs, prijsSetID]
+            );
+
+            console.log(`📈 ${itemData.naam} → Nieuwe prijs: €${nieuwePrijs.toFixed(2)}`);
+        }
+
+        // WebSocket update sturen
+        sendWebSocketUpdate();
+
+        console.log("✅ Prijzen succesvol bijgewerkt!");
+
+    } catch (err) {
+        console.error("❌ Fout bij updaten van prijzen:", err.message);
+    }
+}
+
   
 
 
@@ -77,7 +122,18 @@ wss.on('connection', ws => {
     console.log("📡 Nieuwe WebSocket verbinding");
 
     ws.on('message', message => {
+        const data = JSON.parse(message);
         console.log(`📨 Ontvangen: ${message}`);
+
+        if (data.message === "crash") {
+            if (!crashActive) {
+                console.log("💥 Beurscrash gestart!");
+                startCrash();
+            } else {
+                console.log("🔁 Beurscrash beëindigd – herstel ingeschakeld.");
+                endCrash();
+            }
+        }
     });
 
     ws.on('close', () => {
@@ -85,14 +141,16 @@ wss.on('connection', ws => {
     });
 });
 
+
 // Functie om WebSocket berichten naar de clients te versturen
-const sendWebSocketUpdate = () => {
+const sendWebSocketUpdate = (data = { message: "update" }) => {
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ message: "update" }));
+            client.send(JSON.stringify(data));
         }
     });
 };
+
 
 // Cron job om elke 5 minuten de prijzen te updaten
 cron.schedule('*/1 * * * *', () => {
@@ -252,6 +310,29 @@ app.get('/api/baritemprijs/history', async (req, res) => {
     }
 });
 
+// 📌 Haal de huidige prijzen op uit de baritem-tabel
+app.get('/api/baritems/currentprice', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                id, 
+                naam, 
+                foto, 
+                minimumprijs, 
+                maximumprijs, 
+                available, 
+                huidigeprijs 
+            FROM baritem;
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("❌ Fout bij ophalen van huidige prijzen:", err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+
+
 
 app.post('/api/baritemprijs', async (req, res) => {
     try {
@@ -317,11 +398,41 @@ app.post('/api/baritemprijs', async (req, res) => {
     }
 });
 
+async function startCrash() {
+    crashActive = true;
+
+    const prijzen = await pool.query(`SELECT ID, MinimumPrijs FROM BarItem`);
+    for (const item of prijzen.rows) {
+        await pool.query(
+            "UPDATE BarItem SET huidigeprijs = $1 WHERE ID = $2",
+            [parseFloat(item.minimumprijs), item.id]
+        );
+    }
+
+    sendWebSocketUpdate({ message: "crash" });
+}
 
 
 
 
+async function endCrash() {
+    crashActive = false;
 
-app.listen(port, () => {
-    console.log(`Server draait op http://localhost:${port}`);
+    const prijzen = await pool.query(`SELECT ID, MinimumPrijs, MaximumPrijs FROM BarItem`);
+    for (const item of prijzen.rows) {
+        const gemiddelde = (parseFloat(item.minimumprijs) + parseFloat(item.maximumprijs)) / 2;
+        await pool.query(
+            "UPDATE BarItem SET huidigeprijs = $1 WHERE ID = $2",
+            [gemiddelde, item.id]
+        );
+    }
+
+    sendWebSocketUpdate({ message: "recovery" });
+}
+
+
+
+
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server draait op http://0.0.0.0:${port}`);
 });

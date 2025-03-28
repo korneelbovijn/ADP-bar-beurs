@@ -1,19 +1,50 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef} from "react";
 import axios from "axios";
 
 function AdminPanel() {
+
+    const [loggedIn, setLoggedIn] = useState(false);
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
     const [barItems, setBarItems] = useState([]);
     const [newPrices, setNewPrices] = useState([]);
+    const socket = new WebSocket("ws://172.20.10.3:5001");
+    const socketRef = useRef(null);
+
+
 
     useEffect(() => {
-        fetchBarItems();
-    }, []);
+      fetchBarItems();
+  
+      socketRef.current = new WebSocket("ws://172.20.10.3:5001");
+  
+      socketRef.current.onopen = () => {
+          console.log("📡 WebSocket verbonden met server");
+      };
+  
+      socketRef.current.onclose = () => {
+          console.log("❌ WebSocket gesloten");
+      };
+  
+      return () => {
+          socketRef.current.close();
+      };
+  }, []);
+  
 
     const fetchBarItems = () => {
-        axios.get("http://localhost:5000/api/baritems")
+        axios.get("http://172.20.10.3:5000/api/baritems")
             .then(response => setBarItems(response.data))
             .catch(error => console.error("Error fetching data:", error));
     };
+
+    const handleLogin = () => {
+      if (username === "123" && password === "123") {
+          setLoggedIn(true);
+      } else {
+          alert("❌ Ongeldige inloggegevens");
+      }
+  };
 
     const handlePriceChange = (id, prijs) => {
         setNewPrices(prev => {
@@ -51,7 +82,7 @@ function AdminPanel() {
             return;
         }
 
-        axios.post("http://localhost:5000/api/baritemprijs", { prijzen: newPrices })
+        axios.post("http://172.20.10.3:5000/api/baritemprijs", { prijzen: newPrices })
             .then(() => {
                 console.log("✅ Prijsupdates succesvol verzonden:", newPrices);
                 fetchBarItems();
@@ -61,10 +92,31 @@ function AdminPanel() {
     };
 
     const toggleAvailability = (id, newStatus) => {
-        axios.patch(`http://localhost:5000/api/baritems/${id}/availability`, { available: newStatus })
+        axios.patch(`http://172.20.10.3:5000/api/baritems/${id}/availability`, { available: newStatus })
           .then(() => fetchBarItems())
           .catch(error => console.error("Error updating availability:", error));
       };
+
+      if (!loggedIn) {
+        return (
+            <div style={{ padding: "20px", fontSize: "1.5rem" }}>
+                <h2>Admin Inloggen</h2>
+                <input
+                    type="text"
+                    placeholder="Gebruikersnaam"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                /><br /><br />
+                <input
+                    type="password"
+                    placeholder="Wachtwoord"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                /><br /><br />
+                <button onClick={handleLogin}>Login</button>
+            </div>
+        );
+    }
       
 
     return (
@@ -74,6 +126,21 @@ function AdminPanel() {
             <button onClick={generateRandomPrices} style={{ marginBottom: "10px", padding: "10px" }}>
                 Genereer Willekeurige Prijzen
             </button>
+
+            <button
+              onClick={() => {
+                if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                  socketRef.current.send(JSON.stringify({ message: "crash" }));
+                } else {
+                  console.warn("🚫 WebSocket is niet open.");
+                }
+              }}
+              style={{ marginBottom: "10px", padding: "10px", marginLeft: "10px", backgroundColor: "red", color: "white" }}
+            >
+              💥 Beurscrash
+            </button>
+
+
 
             <table border="1">
                 <thead>

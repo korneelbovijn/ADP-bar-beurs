@@ -5,23 +5,35 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 function GraphPanel() {
     const [priceHistory, setPriceHistory] = useState([]);
     const [currentPrices, setCurrentPrices] = useState([]);
+    const [crashMode, setCrashMode] = useState(false);
+
 
     useEffect(() => {
         fetchPriceHistory();
         fetchCurrentPrices();
 
         // 📡 WebSocket verbinden met server
-        const socket = new WebSocket("ws://localhost:5001");
+        const socket = new WebSocket("ws://172.20.10.3:5001");
 
         socket.onopen = () => {
             console.log("📡 WebSocket verbonden!");
         };
 
         socket.onmessage = (event) => {
-            console.log("🔄 Prijsgeschiedenis wordt geüpdatet via WebSocket!");
-            fetchPriceHistory(); // ⬅️ Herlaad de grafiek als er een update is
-            fetchCurrentPrices(); // ⬅️ Herlaad de huidige prijzenlijst
+            const data = JSON.parse(event.data);
+            console.log("📡 WebSocket bericht ontvangen:", data);
+        
+            if (data.message === "crash") {
+                console.warn("💥 Beurscrash geactiveerd!");
+                setCrashMode(true);
+            } else {
+                fetchPriceHistory();
+                fetchCurrentPrices();
+            }
+        
         };
+        
+
 
         socket.onclose = () => {
             console.log("❌ WebSocket verbinding gesloten.");
@@ -32,8 +44,9 @@ function GraphPanel() {
         };
     }, []);
 
+    // 📈 Haal de prijsgeschiedenis op voor de grafiek
     const fetchPriceHistory = () => {
-        axios.get("http://localhost:5000/api/baritemprijs/history")
+        axios.get("http://172.20.10.3:5000/api/baritemprijs/history")
             .then(response => {
                 console.log("Ontvangen prijsgeschiedenis:", response.data);
                 processPriceHistory(response.data);
@@ -41,8 +54,9 @@ function GraphPanel() {
             .catch(error => console.error("❌ Error fetching price history:", error));
     };
 
+    // 📋 Haal de huidige prijzen op voor de tabel (uit `huidigeprijs` in `baritem`)
     const fetchCurrentPrices = () => {
-        axios.get("http://localhost:5000/api/baritems")
+        axios.get("http://172.20.10.3:5000/api/baritems/currentprice") 
             .then(response => {
                 console.log("Ontvangen huidige prijzen:", response.data);
                 setCurrentPrices(response.data);
@@ -50,6 +64,7 @@ function GraphPanel() {
             .catch(error => console.error("❌ Error fetching current prices:", error));
     };
 
+    // 📊 Prijsgeschiedenis verwerken voor de grafiek
     const processPriceHistory = (data) => {
         if (data.length === 0) return;
 
@@ -71,7 +86,9 @@ function GraphPanel() {
 
     return (
         <div style={{ textAlign: "center" }}>
-            <h1>Prijsgeschiedenis van BarItems</h1>
+
+
+            <h1>Prijzen</h1>
             <ResponsiveContainer width="90%" height={500}>
                 <LineChart data={priceHistory}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -100,21 +117,41 @@ function GraphPanel() {
                 </LineChart>
             </ResponsiveContainer>
 
+            
+{crashMode && (
+  <div style={{
+    backgroundColor: "red",
+    color: "white",
+    fontSize: "3rem",
+    fontWeight: "bold",
+    padding: "20px",
+    marginBottom: "20px",
+    borderRadius: "10px"
+  }}>
+    💥 BEURSCRASH ACTIEF 💥
+  </div>
+)}
+
             <h2>Huidige Prijzen</h2>
             <table style={{ marginTop: "20px", width: "80%", marginLeft: "auto", marginRight: "auto", borderCollapse: "collapse" }}>
-            <tbody>
-  {currentPrices.map(item => (
-    <tr key={item.id} style={{ textDecoration: item.available ? "none" : "line-through" }}>
-      <td style={{ border: "none", padding: "10px" }}>
-        {item.foto}{item.naam}
-      </td>
-      <td style={{ border: "none", padding: "10px" }}>
-        €{item.LaatstePrijs}
-      </td>
-    </tr>
-  ))}
-</tbody>
-
+                <thead>
+                    <tr>
+                        <th style={{ borderBottom: "1px solid #ddd", padding: "10px" }}>Product</th>
+                        <th style={{ borderBottom: "1px solid #ddd", padding: "10px" }}>Huidige Prijs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {currentPrices.map(item => (
+                        <tr key={item.id} style={{ textDecoration: item.available ? "none" : "line-through" }}>
+                            <td style={{ border: "none", padding: "10px" }}>
+                                {item.foto} {item.naam}
+                            </td>
+                            <td style={{ border: "none", padding: "10px" }}>
+                                €{item.huidigeprijs}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
             </table>
         </div>
     );

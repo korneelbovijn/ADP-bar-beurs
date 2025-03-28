@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
+
+
 function App() {
     const [barItems, setBarItems] = useState([]);
     const [selectedItems, setSelectedItems] = useState([]);
+
+    
 
     useEffect(() => {
         fetchBarItems();
 
         // 📡 WebSocket verbinding maken
-        const socket = new WebSocket("ws://localhost:5001");
+        const socket = new WebSocket("ws://172.20.10.3:5001");
 
         socket.onopen = () => {
             console.log("📡 WebSocket verbonden!");
@@ -31,7 +35,7 @@ function App() {
 
     // Haal barItems op, inclusief de laatste prijzen
     const fetchBarItems = () => {
-        axios.get("http://localhost:5000/api/baritems")
+        axios.get("http://172.20.10.3:5000/api/baritems")
             .then(response => {
                 console.log("Ontvangen data van backend:", response.data); // Log data
                 setBarItems(response.data);
@@ -60,13 +64,16 @@ function App() {
 
         console.log("Verkoopgegevens die naar backend worden gestuurd:", itemsToSend);
 
-        axios.post("http://localhost:5000/api/barverkoop", { items: itemsToSend })
+        axios.post("http://172.20.10.3:5000/api/barverkoop", { items: itemsToSend })
             .then(response => {
                 alert("Verkoop geregistreerd! ID: " + response.data.verkoopID);
                 setSelectedItems([]); // Reset de geselecteerde items
             })
             .catch(error => console.error("Error registering sale:", error));
     };
+
+    
+    
 
     return (
         <div>

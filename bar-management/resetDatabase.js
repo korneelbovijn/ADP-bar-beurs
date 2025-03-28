@@ -26,8 +26,8 @@ async function resetDatabase() {
     let insertedBarItems = [];
     for (const item of config.barItems) {
       const result = await pool.query(
-        "INSERT INTO BarItem (Naam, Foto, MinimumPrijs, MaximumPrijs) VALUES ($1, $2, $3, $4) RETURNING ID",
-        [item.naam, item.foto, item.minPrijs, item.maxPrijs]
+        "INSERT INTO BarItem (Naam, Foto, MinimumPrijs, MaximumPrijs, HuidigePrijs) VALUES ($1, $2, $3, $4, $5) RETURNING ID",
+        [item.naam, item.foto, item.minPrijs, item.maxPrijs, item.startPrijs]
       );
       insertedBarItems.push({ id: result.rows[0].id, ...item });
     }
