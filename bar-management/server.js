@@ -112,6 +112,52 @@ async function updatePrices() {
     }
 }
 
+
+async function isCrashActive() {
+    const result = await pool.query("SELECT CrashActief FROM BeursStatus LIMIT 1");
+    return result.rows[0]?.crashactief === true;
+}
+
+async function setCrashStatus(status) {
+    await pool.query("UPDATE BeursStatus SET CrashActief = $1", [status]);
+    console.log("updaten beursstatus gelukt")
+
+}
+
+async function toggleCrash() {
+    const current = await isCrashActive();
+
+    if (!current) {
+        console.log("💥 Crash geactiveerd");
+        await setCrashStatus(true);
+
+        const prijzen = await pool.query(`SELECT ID, MinimumPrijs FROM BarItem`);
+        for (const item of prijzen.rows) {
+            await pool.query(
+                "UPDATE BarItem SET huidigeprijs = $1 WHERE ID = $2",
+                [parseFloat(item.minimumprijs), item.id]
+            );
+        }
+
+        sendWebSocketUpdate({ message: "crash" });
+
+    } else {
+        console.log("🔁 Crash beëindigd – herstel naar gemiddelde");
+        await setCrashStatus(false);
+
+        const prijzen = await pool.query(`SELECT ID, MinimumPrijs, MaximumPrijs FROM BarItem`);
+        for (const item of prijzen.rows) {
+            const gemiddelde = (parseFloat(item.minimumprijs) + parseFloat(item.maximumprijs)) / 2;
+            await pool.query(
+                "UPDATE BarItem SET huidigeprijs = $1 WHERE ID = $2",
+                [gemiddelde, item.id]
+            );
+        }
+
+        sendWebSocketUpdate({ message: "recovery" });
+    }
+}
+
   
 
 
@@ -124,17 +170,12 @@ wss.on('connection', ws => {
     ws.on('message', message => {
         const data = JSON.parse(message);
         console.log(`📨 Ontvangen: ${message}`);
-
+    
         if (data.message === "crash") {
-            if (!crashActive) {
-                console.log("💥 Beurscrash gestart!");
-                startCrash();
-            } else {
-                console.log("🔁 Beurscrash beëindigd – herstel ingeschakeld.");
-                endCrash();
-            }
+            toggleCrash(); // Enige functie nodig
         }
     });
+    
 
     ws.on('close', () => {
         console.log("❌ WebSocket verbinding gesloten");
@@ -398,38 +439,16 @@ app.post('/api/baritemprijs', async (req, res) => {
     }
 });
 
-async function startCrash() {
-    crashActive = true;
 
-    const prijzen = await pool.query(`SELECT ID, MinimumPrijs FROM BarItem`);
-    for (const item of prijzen.rows) {
-        await pool.query(
-            "UPDATE BarItem SET huidigeprijs = $1 WHERE ID = $2",
-            [parseFloat(item.minimumprijs), item.id]
-        );
+app.get("/api/beursstatus", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT CrashActief FROM BeursStatus LIMIT 1");
+        res.json({ crashActief: result.rows[0]?.crashactief });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Fout bij ophalen beursstatus");
     }
-
-    sendWebSocketUpdate({ message: "crash" });
-}
-
-
-
-
-async function endCrash() {
-    crashActive = false;
-
-    const prijzen = await pool.query(`SELECT ID, MinimumPrijs, MaximumPrijs FROM BarItem`);
-    for (const item of prijzen.rows) {
-        const gemiddelde = (parseFloat(item.minimumprijs) + parseFloat(item.maximumprijs)) / 2;
-        await pool.query(
-            "UPDATE BarItem SET huidigeprijs = $1 WHERE ID = $2",
-            [gemiddelde, item.id]
-        );
-    }
-
-    sendWebSocketUpdate({ message: "recovery" });
-}
-
+});
 
 
 
