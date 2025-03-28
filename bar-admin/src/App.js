@@ -8,7 +8,6 @@ function AdminPanel() {
     const [password, setPassword] = useState("");
     const [barItems, setBarItems] = useState([]);
     const [newPrices, setNewPrices] = useState([]);
-    const socket = new WebSocket("ws://172.20.10.3:5001");
     const socketRef = useRef(null);
 
 

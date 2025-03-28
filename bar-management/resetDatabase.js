@@ -1,13 +1,13 @@
-require('dotenv').config();
-const { Pool } = require('pg');
-const config = require('./config');  // Importeer configuratie
+require("dotenv").config();
+const { Pool } = require("pg");
+const config = require("./config"); // Importeer configuratie
 
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT
+  port: process.env.DB_PORT,
 });
 
 async function resetDatabase() {
@@ -19,7 +19,7 @@ async function resetDatabase() {
     await pool.query("DELETE FROM BarItemPrijsDetail;");
     await pool.query("DELETE FROM BarItemPrijs;");
     await pool.query("DELETE FROM BarItem;");
-    
+
     console.log("✅ Alle data is verwijderd.");
 
     // Voeg nieuwe BarItems toe vanuit de config
@@ -49,6 +49,11 @@ async function resetDatabase() {
       );
     }
     console.log("✅ Startprijzen ingesteld voor alle items.");
+
+    // Zet beursstatus terug naar niet actief
+    await pool.query("UPDATE BeursStatus SET CrashActief = false;");
+    console.log("🔧 Beursstatus gereset naar 'niet actief'");
+
     console.log("🎉 Database setup voltooid!");
     process.exit();
   } catch (err) {

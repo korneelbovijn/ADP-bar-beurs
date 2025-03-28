@@ -15,6 +15,19 @@ function GraphPanel() {
   const [priceHistory, setPriceHistory] = useState([]);
   const [currentPrices, setCurrentPrices] = useState([]);
   const [crashMode, setCrashMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  const kleurMapping = {
+    Pint: "#f0c331", // bruin (bier)
+    Rouge: "#A020F0", // donkerrood (rode wijn)
+    Mojito: "#94bf08", // muntgroen
+    "Vodka sprite": "#44b433", // zilver (neutraal/kristal)
+    Baco: "#ed77a5", // donkerbruin (cola + rum)
+    "Vodka cranberry": "#e60808", // felrood (cranberry)
+    Wijn: "#67adc7", // paars (wijn)
+    "Shot tequila": "#ccd0cc", // oranje (sterk)
+    Frisdrank: "#1E90FF", // blauw (fris/limonade)
+  };
 
   useEffect(() => {
     // Haal de status op bij laden
@@ -108,7 +121,26 @@ function GraphPanel() {
   };
 
   return (
-    <div style={{ textAlign: "center" }}>
+    <div
+      style={{
+        textAlign: "center",
+        backgroundColor: darkMode ? "#1e1e1e" : "#fff",
+        color: darkMode ? "#f5f5f5" : "#000",
+        minHeight: "100vh",
+      }}
+    >
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+        style={{
+          margin: "0px",
+          padding: "0px 0px",
+          borderRadius: "px",
+          cursor: "pointer",
+        }}
+      >
+        {darkMode ? "Light Mode" : "Dark Mode"}
+      </button>
+
       <h1>Prijzen</h1>
       <ResponsiveContainer width="90%" height={500}>
         <LineChart data={priceHistory}>
@@ -130,15 +162,14 @@ function GraphPanel() {
 
           {priceHistory.length > 0 &&
             Object.keys(priceHistory[0])
-              .filter((key) => key !== "time")
+              .filter((key) => key !== "time" && key !== "Frisdrank")
+
               .map((barItemNaam, index) => (
                 <Line
                   key={index}
                   type="monotone"
                   dataKey={barItemNaam}
-                  stroke={`#${Math.floor(Math.random() * 16777215).toString(
-                    16
-                  )}`}
+                  stroke={kleurMapping[barItemNaam] || "#000000"} // fallback kleur
                   strokeWidth={3}
                 />
               ))}
@@ -157,11 +188,11 @@ function GraphPanel() {
             borderRadius: "10px",
           }}
         >
-          💥 BEURSCRASH ACTIEF 💥
+          💥 BEURSCRASH 💥
         </div>
       )}
 
-      <h2>Huidige Prijzen</h2>
+      <h2> -- Prijslijst -- </h2>
       <table
         style={{
           marginTop: "20px",
@@ -171,16 +202,6 @@ function GraphPanel() {
           borderCollapse: "collapse",
         }}
       >
-        <thead>
-          <tr>
-            <th style={{ borderBottom: "1px solid #ddd", padding: "10px" }}>
-              Product
-            </th>
-            <th style={{ borderBottom: "1px solid #ddd", padding: "10px" }}>
-              Huidige Prijs
-            </th>
-          </tr>
-        </thead>
         <tbody>
           {currentPrices.map((item) => (
             <tr
@@ -193,7 +214,7 @@ function GraphPanel() {
                 {item.foto} {item.naam}
               </td>
               <td style={{ border: "none", padding: "10px" }}>
-                €{item.huidigeprijs}
+                {Math.round(item.huidigeprijs / 0.5)} bonnen
               </td>
             </tr>
           ))}
