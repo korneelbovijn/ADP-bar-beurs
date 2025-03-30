@@ -9,6 +9,8 @@ const port = process.env.PORT || 5000;
 
 const visualUpdateDelayMin = 1; // hoe vaak prijzen gelogd worden in BarItemPrijsDetail (in minuten)
 const priceCalculationDelayMin = 3; // hoe vaak nieuwe prijzen berekend worden (in minuten)
+const aanpassingsFactor = 0.2; // 0.2 = 20%, stel hier 0.0 tot 2.0 in (0% - 200%)
+
 
 // Database connectief
 const pool = new Pool({
@@ -19,15 +21,19 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
-// Elke minuut: alleen loggen in baritemprijsdetail
+// Alleen loggen (elke minuut behalve als het update-moment is)
 cron.schedule(`*/${visualUpdateDelayMin} * * * *`, () => {
-  updatePrices(false); // log, geen update
+  const now = new Date();
+  if (now.getMinutes() % priceCalculationDelayMin !== 0) {
+    updatePrices(false);
+  }
 });
 
-// Elke 30 minuten: echte prijsupdate + huidigeprijs aanpassen
+// Elke 3 minuten: prijs update + loggen
 cron.schedule(`*/${priceCalculationDelayMin} * * * *`, () => {
-  updatePrices(true); // log + update
+  updatePrices(true);
 });
+
 
 async function updatePrices(updateHuidigePrijs = false) {
   if (await isCrashActive()) {
@@ -42,10 +48,17 @@ async function updatePrices(updateHuidigePrijs = false) {
     const verkopen = await pool.query(`
             SELECT bi.id, COALESCE(SUM(bvi.aantal), 0) AS totaal_verkocht
             FROM baritem bi
-            LEFT JOIN barverkoopitem bvi ON bi.id = bvi.baritem_id
-            LEFT JOIN barverkoop b ON bvi.barverkoop_id = b.id AND b.datumtijd >= NOW() - INTERVAL '${verkoopTijdspanne} minutes'
+            LEFT JOIN (
+              SELECT bvi.*
+              FROM barverkoopitem bvi
+              JOIN barverkoop b ON bvi.barverkoop_id = b.id
+              WHERE b.datumtijd >= NOW() - INTERVAL '${priceCalculationDelayMin} minutes'
+            ) bvi ON bi.id = bvi.baritem_id
+            WHERE bi.available = true AND bi.naam != 'Frisdrank'
             GROUP BY bi.id
             ORDER BY totaal_verkocht ASC;
+
+
         `);
 
     const verkochteItems = verkopen.rows;
@@ -62,6 +75,9 @@ async function updatePrices(updateHuidigePrijs = false) {
     const huidigePrijzen = await pool.query(`
             SELECT id, naam, minimumprijs, maximumprijs, huidigeprijs as laatsteprijs 
             FROM baritem
+            WHERE available = true AND naam != 'Frisdrank'
+
+
         `);
 
     const prijzenMap = new Map(
@@ -75,6 +91,10 @@ async function updatePrices(updateHuidigePrijs = false) {
       [currentTimestamp]
     );
     const prijsSetID = prijsSet.rows[0].id;
+    console.log(updateHuidigePrijs ? "💾 Definitieve prijsupdate" : "🧪 Simulatie van prijsupdate");
+
+    console.log("🧾 Verkoopanalyse:");
+console.log("=".repeat(60));
 
     // Stap 4: Bereken nieuwe prijzen
     for (let i = 0; i < totalItems; i++) {
@@ -92,7 +112,7 @@ async function updatePrices(updateHuidigePrijs = false) {
       const extremeFactor = Math.abs(Math.cos(normalisedIndex * Math.PI));
       // Dit geeft een hoge waarde aan het begin en eind, en een lage waarde in het midden
 
-      const maxVariatie = basisVerandering * 0.2; // Max 20% variatie
+      const maxVariatie = basisVerandering * aanpassingsFactor;
 
       if (i < totalItems / 2) {
         // Onderste helft → prijs dalen
@@ -111,16 +131,32 @@ async function updatePrices(updateHuidigePrijs = false) {
       );
 
       if (updateHuidigePrijs) {
+        // console.log("prijzen doorvoeren")
         await pool.query("UPDATE baritem SET huidigeprijs = $1 WHERE id = $2", [
           nieuwePrijs,
           item.id,
         ]);
       }
 
+
+      const prijsVerschil = nieuwePrijs - huidigePrijs;
+      const richting =
+        prijsVerschil > 0
+          ? "⬆️ gestegen"
+          : prijsVerschil < 0
+          ? "⬇️ gedaald"
+          : "➡️ gelijk gebleven";
+
       console.log(
-        `📈 ${itemData.naam} → Nieuwe prijs: €${nieuwePrijs.toFixed(2)}`
+        `🔹 ${itemData.naam.padEnd(20)} | Verkocht: ${item.totaal_verkocht
+          .toString()
+          .padStart(3)} stuks | Prijs ${richting} met €${Math.abs(
+          prijsVerschil
+        ).toFixed(2)}`
       );
     }
+    console.log("=".repeat(60));
+
 
     // WebSocket update sturen
     sendWebSocketUpdate();
@@ -255,11 +291,9 @@ app.post("/api/barverkoop", async (req, res) => {
       console.log(`Item toevoegen: ${JSON.stringify(item)}`);
 
       if (!item.VerkoopPrijs) {
-        return res
-          .status(400)
-          .json({
-            message: "VerkoopPrijs ontbreekt voor item: " + item.BarItem_ID,
-          });
+        return res.status(400).json({
+          message: "VerkoopPrijs ontbreekt voor item: " + item.BarItem_ID,
+        });
       }
 
       await pool.query(
