@@ -35,7 +35,8 @@ function App() {
       .get("http://172.20.10.3:5000/api/baritems")
       .then((response) => {
         console.log("Ontvangen data van backend:", response.data);
-        setBarItems(response.data);
+        setBarItems(response.data.sort((a, b) => a.naam.localeCompare(b.naam)));
+
   
         // ⬇️ Update prijzen van geselecteerde items
         setSelectedItems((prevSelected) =>
@@ -118,40 +119,38 @@ function App() {
   );
   return (
     <div>
-      <h1>Bar Verkoop</h1>
+      {/* <p>ADP x Kerlinga bar</p> */}
       <div>
-        <h2>Beschikbare Items</h2>
         {barItems.map((item) => (
           <button
             key={item.id}
             onClick={() => addItem(item)}
             disabled={!item.available}
             style={{
-              fontSize: "2rem",
-              padding: "10px",
+              fontSize: "1.2rem",
+              padding: "6px 10px",
               margin: "5px",
               opacity: item.available ? 1 : 0.5,
               cursor: item.available ? "pointer" : "not-allowed",
             }}
+            
           >
-            <span style={{ fontSize: "3rem" }}>{item.foto}</span> {item.naam} (
-            {Math.round(Number(item.LaatstePrijs) / 0.5)} bonnen – €
-            {Number(item.LaatstePrijs).toFixed(2)})
+            <span style={{ fontSize: "2rem" }}>{item.foto}</span> {item.naam} (
+            {Math.round(Number(item.LaatstePrijs) / 0.5)} bonnen)
           </button>
         ))}
       </div>
       <div>
-        <h2>Geselecteerde Items</h2>
+        <h3>Geselecteerde Items</h3>
         {selectedItems.length > 0 ? (
           <ul>
             {selectedItems.map((item, index) => {
               const barItem = barItems.find((b) => b.id === item.BarItem_ID);
               return (
-                <li key={index} style={{ fontSize: "2rem" }}>
-                  <span style={{ fontSize: "3rem" }}>{barItem?.foto}</span>{" "}
+                <li key={index} style={{ fontSize: "1rem" }}>
+                  <span style={{ fontSize: "2rem" }}>{barItem?.foto}</span>{" "}
                   {barItem?.naam} (
-                  {Math.round(Number(barItem?.LaatstePrijs) / 0.5)} bonnen – €
-                  {Number(barItem?.LaatstePrijs).toFixed(2)}) x{item.Aantal}
+                  {Math.round(Number(barItem?.LaatstePrijs) / 0.5)} bonnen ) x{item.Aantal}
                 </li>
               );
             })}
@@ -162,14 +161,14 @@ function App() {
         {selectedItems.length > 0 && (
           <button
             onClick={handleCheckout}
-            style={{ fontSize: "2rem", padding: "10px" }}
+            style={{ fontSize: "1.2rem", padding: "5px" }}
           >
             Verkoop registreren
           </button>
         )}
         {selectedItems.length > 0 && (
           <div style={{ fontSize: "2rem", marginTop: "10px" }}>
-            Totaal: {Math.round(totaalBonnen)} bonnen – €{totaalEuro.toFixed(2)}
+            Totaal: {Math.round(totaalBonnen)} bonnen
           </div>
         )}
       </div>

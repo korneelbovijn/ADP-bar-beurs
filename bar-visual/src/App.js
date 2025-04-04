@@ -141,8 +141,11 @@ function GraphPanel() {
         {darkMode ? "Light Mode" : "Dark Mode"}
       </button>
 
-      <h1>Prijzen</h1>
-      <ResponsiveContainer width="90%" height={500}>
+      <h2>A. De Pauw x Kerlinga</h2>
+      <h1>Wall Street On The Rocks!</h1>
+
+      {!crashMode && (
+        <ResponsiveContainer width="90%" height={500}>
         <LineChart data={priceHistory}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
@@ -175,6 +178,12 @@ function GraphPanel() {
               ))}
         </LineChart>
       </ResponsiveContainer>
+      )}
+
+      {/* {crashMode && (
+        <img src="https://bsmedia.business-standard.com/_media/bs/img/article/2024-09/20/full/1726822730-9665.jpg" width={500}></img>
+      )} */}
+      
 
       {crashMode && (
         <div
@@ -188,7 +197,8 @@ function GraphPanel() {
             borderRadius: "10px",
           }}
         >
-          💥 BEURSCRASH 💥
+          <h1>💥 BEURSCRASH 💥</h1>
+          <p>NU alle drank aan de laagste prijs</p>
         </div>
       )}
 
