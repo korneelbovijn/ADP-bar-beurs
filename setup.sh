@@ -97,8 +97,12 @@ for app in bar-management bar-app bar-admin bar-visual; do
   (cd "$SCRIPT_DIR/$app" && npm install)
 done
 
+# --- Initialiseer de database tabellen ---
+echo "[8/9] Database tabellen aanmaken (init-db.js)..."
+(cd "$SCRIPT_DIR/bar-management" && node init-db.js)
+
 # --- Seed de database ---
-echo "[8/9] Database seeden (seed.js)..."
+echo "[8b/9] Database seeden (seed.js)..."
 (cd "$SCRIPT_DIR/bar-management" && node seed.js)
 
 # --- start-all.sh uitvoerbaar maken ---
