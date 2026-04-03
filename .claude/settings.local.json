@@ -6,7 +6,9 @@
       "Bash(PGPASSWORD=442764 psql:*)",
       "Bash(node seed.js)",
       "Bash(node test-reset.js)",
-      "Bash(node simulator.js)"
+      "Bash(node simulator.js)",
+      "Bash(git update-index:*)",
+      "Bash(git add:*)"
     ]
   }
 }
