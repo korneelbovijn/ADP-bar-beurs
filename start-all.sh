@@ -9,6 +9,19 @@ export NVM_DIR="$HOME/.nvm"
 
 echo "=== Bar-Beurs starten ==="
 
+# --- Bestaande processen opruimen ---
+echo "[0/4] Poorten vrijmaken (5000, 5001, 3000, 3001, 3004)..."
+for PORT in 5000 5001 3000 3001 3004; do
+  if command -v fuser &>/dev/null; then
+    fuser -k "${PORT}/tcp" &>/dev/null || true
+  elif command -v lsof &>/dev/null; then
+    PIDS=$(lsof -ti tcp:"$PORT" 2>/dev/null)
+    [ -n "$PIDS" ] && kill -9 $PIDS 2>/dev/null || true
+  fi
+done
+echo "      Wachten 2 seconden zodat poorten vrijkomen..."
+sleep 2
+
 # --- Backend ---
 echo "[1/4] bar-management starten (poort 5000 / 5001)..."
 (cd "$SCRIPT_DIR/bar-management" && npm start > /tmp/bar-management.log 2>&1) &
