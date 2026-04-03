@@ -9,7 +9,7 @@ function App() {
     fetchBarItems();
 
     // 📡 WebSocket verbinding maken
-    const socket = new WebSocket("ws://172.20.10.3:5001");
+    const socket = new WebSocket(process.env.REACT_APP_WS_URL);
 
     socket.onopen = () => {
       console.log("📡 WebSocket verbonden!");
@@ -32,7 +32,7 @@ function App() {
   // Haal barItems op, inclusief de laatste prijzen
   const fetchBarItems = () => {
     axios
-      .get("http://172.20.10.3:5000/api/baritems")
+      .get(`${process.env.REACT_APP_API_URL}/api/baritems`)
       .then((response) => {
         console.log("Ontvangen data van backend:", response.data);
         setBarItems(response.data.sort((a, b) => a.naam.localeCompare(b.naam)));
@@ -93,7 +93,7 @@ function App() {
     );
 
     axios
-      .post("http://172.20.10.3:5000/api/barverkoop", { items: itemsToSend })
+      .post(`${process.env.REACT_APP_API_URL}/api/barverkoop`, { items: itemsToSend })
       .then((response) => {
         alert(
           `Verkoop geregistreerd!\nID: ${

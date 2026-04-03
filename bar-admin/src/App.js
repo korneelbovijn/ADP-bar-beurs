@@ -15,7 +15,7 @@ function AdminPanel() {
     useEffect(() => {
       fetchBarItems();
   
-      socketRef.current = new WebSocket("ws://172.20.10.3:5001");
+      socketRef.current = new WebSocket(process.env.REACT_APP_WS_URL);
   
       socketRef.current.onopen = () => {
           console.log("📡 WebSocket verbonden met server");
@@ -32,7 +32,7 @@ function AdminPanel() {
   
 
     const fetchBarItems = () => {
-        axios.get("http://172.20.10.3:5000/api/baritems")
+        axios.get(`${process.env.REACT_APP_API_URL}/api/baritems`)
             .then(response => setBarItems(response.data))
             .catch(error => console.error("Error fetching data:", error));
     };
@@ -81,7 +81,7 @@ function AdminPanel() {
             return;
         }
 
-        axios.post("http://172.20.10.3:5000/api/baritemprijs", { prijzen: newPrices })
+        axios.post(`${process.env.REACT_APP_API_URL}/api/baritemprijs`, { prijzen: newPrices })
             .then(() => {
                 console.log("✅ Prijsupdates succesvol verzonden:", newPrices);
                 fetchBarItems();
@@ -91,7 +91,7 @@ function AdminPanel() {
     };
 
     const toggleAvailability = (id, newStatus) => {
-        axios.patch(`http://172.20.10.3:5000/api/baritems/${id}/availability`, { available: newStatus })
+        axios.patch(`${process.env.REACT_APP_API_URL}/api/baritems/${id}/availability`, { available: newStatus })
           .then(() => fetchBarItems())
           .catch(error => console.error("Error updating availability:", error));
       };

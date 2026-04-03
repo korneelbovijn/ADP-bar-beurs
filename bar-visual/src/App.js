@@ -31,7 +31,7 @@ function GraphPanel() {
 
   useEffect(() => {
     // Haal de status op bij laden
-    axios.get("http://172.20.10.3:5000/api/beursstatus").then((res) => {
+    axios.get(`${process.env.REACT_APP_API_URL}/api/beursstatus`).then((res) => {
       if (res.data.crashActief) setCrashMode(true);
     });
 
@@ -39,7 +39,7 @@ function GraphPanel() {
     fetchCurrentPrices();
 
     // 📡 WebSocket verbinden met server
-    const socket = new WebSocket("ws://172.20.10.3:5001");
+    const socket = new WebSocket(process.env.REACT_APP_WS_URL);
 
     socket.onopen = () => {
       console.log("📡 WebSocket verbonden!");
@@ -75,7 +75,7 @@ function GraphPanel() {
   // 📈 Haal de prijsgeschiedenis op voor de grafiek
   const fetchPriceHistory = () => {
     axios
-      .get("http://172.20.10.3:5000/api/baritemprijs/history")
+      .get(`${process.env.REACT_APP_API_URL}/api/baritemprijs/history`)
       .then((response) => {
         console.log("Ontvangen prijsgeschiedenis:", response.data);
         processPriceHistory(response.data);
@@ -88,7 +88,7 @@ function GraphPanel() {
   // 📋 Haal de huidige prijzen op voor de tabel (uit `huidigeprijs` in `baritem`)
   const fetchCurrentPrices = () => {
     axios
-      .get("http://172.20.10.3:5000/api/baritems/currentprice")
+      .get(`${process.env.REACT_APP_API_URL}/api/baritems/currentprice`)
       .then((response) => {
         console.log("Ontvangen huidige prijzen:", response.data);
         setCurrentPrices(response.data);

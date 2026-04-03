@@ -7,8 +7,8 @@ const WebSocket = require("ws");
 const app = express();
 const port = process.env.PORT || 5000;
 
-const visualUpdateDelayMin = 1; // hoe vaak prijzen gelogd worden in BarItemPrijsDetail (in minuten)
-const priceCalculationDelayMin = 3; // hoe vaak nieuwe prijzen berekend worden (in minuten)
+const visualUpdateDelayMin = 3; // hoe vaak prijzen gelogd worden in BarItemPrijsDetail (in minuten)
+const priceCalculationDelayMin = 15; // hoe vaak nieuwe prijzen berekend worden (in minuten)
 const aanpassingsFactor = 0.2; // 0.2 = 20%, stel hier 0.0 tot 2.0 in (0% - 200%)
 
 
