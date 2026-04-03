@@ -25,6 +25,10 @@ function AdminPanel() {
           console.log("📡 WebSocket verbonden met server");
         };
 
+        socket.onmessage = () => {
+          fetchBarItems();
+        };
+
         socket.onclose = () => {
           console.log("❌ WebSocket gesloten. Herverbinden in 3s...");
           reconnectTimeout = setTimeout(connect, 3000);
