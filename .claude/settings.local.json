@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(ipconfig)",
-      "Bash(ipconfig /all)"
+      "Bash(ipconfig /all)",
+      "Bash(PGPASSWORD=442764 psql:*)",
+      "Bash(node seed.js)",
+      "Bash(node test-reset.js)",
+      "Bash(node simulator.js)"
     ]
   }
 }

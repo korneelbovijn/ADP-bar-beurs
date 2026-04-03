@@ -62,6 +62,21 @@ Ended the same way — server restores prices to `(min + max) / 2` and broadcast
 | `BarItemPrijsDetail` | Price per drink per snapshot: baritem_id, prijs, baritemprijs_id |
 | `BeursStatus` | Single row: `CrashActief` boolean |
 
+## REST API endpoints (`bar-management`)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/baritems` | All drinks with current prices |
+| POST | `/api/baritems` | Create a new drink |
+| PATCH | `/api/baritems/:id/availability` | Toggle available flag |
+| POST | `/api/barverkoop` | Submit a sale (cart checkout) |
+| GET | `/api/baritemprijs/history` | Price history for graph |
+| GET | `/api/baritems/currentprice` | Current prices snapshot |
+| POST | `/api/baritemprijs` | Manually set prices (admin) |
+| GET | `/api/beursstatus` | Whether a crash is active |
+
+WebSocket (port 5001) carries: `{ message: "update" }` on price change, `{ message: "crash" }` / `{ message: "recovery" }` for crash events.
+
 ## Frontend apps
 
 All three are single-file React apps (`src/App.js`). They share the same pattern: fetch data on mount, open a WebSocket, re-fetch on WebSocket messages.

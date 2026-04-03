@@ -11,6 +11,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+const prijsPerBon = parseFloat(process.env.REACT_APP_EURO_PER_KAART) / parseFloat(process.env.REACT_APP_BONNEN_PER_KAART);
+
 function GraphPanel() {
   const [priceHistory, setPriceHistory] = useState([]);
   const [currentPrices, setCurrentPrices] = useState([]);
@@ -18,15 +20,14 @@ function GraphPanel() {
   const [darkMode, setDarkMode] = useState(false);
 
   const kleurMapping = {
-    Pint: "#f0c331", // bruin (bier)
-    Rouge: "#A020F0", // donkerrood (rode wijn)
-    Mojito: "#94bf08", // muntgroen
-    "Vodka sprite": "#44b433", // zilver (neutraal/kristal)
-    Baco: "#ed77a5", // donkerbruin (cola + rum)
-    "Vodka cranberry": "#e60808", // felrood (cranberry)
-    Wijn: "#67adc7", // paars (wijn)
-    "Shot tequila": "#ccd0cc", // oranje (sterk)
-    Frisdrank: "#1E90FF", // blauw (fris/limonade)
+    Pint: "#f0c331",
+    Rouge: "#A020F0",
+    Mojito: "#94bf08",
+    "Vodka sprite": "#44b433",
+    Baco: "#ed77a5",
+    "Tequila sunrise": "#FF6B00",
+    "Shot tequila": "#ccd0cc",
+    Frisdrank: "#1E90FF",
   };
 
   useEffect(() => {
@@ -39,37 +40,48 @@ function GraphPanel() {
     fetchCurrentPrices();
 
     // 📡 WebSocket verbinden met server
-    const socket = new WebSocket(process.env.REACT_APP_WS_URL);
+    let socket;
+    let reconnectTimeout;
 
-    socket.onopen = () => {
-      console.log("📡 WebSocket verbonden!");
+    const connect = () => {
+      socket = new WebSocket(process.env.REACT_APP_WS_URL);
+
+      socket.onopen = () => {
+        console.log("📡 WebSocket verbonden!");
+      };
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log("📡 WebSocket bericht ontvangen:", data);
+
+        if (data.message === "crash") {
+          console.warn("💥 Beurscrash geactiveerd!");
+          setCrashMode(true);
+          fetchCurrentPrices();
+        } else if (data.message === "recovery") {
+          console.log("🔁 Beurscrash beëindigd");
+          setCrashMode(false);
+          fetchCurrentPrices();
+        } else {
+          fetchPriceHistory();
+          fetchCurrentPrices();
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("❌ WebSocket verbinding gesloten. Herverbinden in 3s...");
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
     };
 
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("📡 WebSocket bericht ontvangen:", data);
-
-      if (data.message === "crash") {
-        console.warn("💥 Beurscrash geactiveerd!");
-        setCrashMode(true);
-        fetchCurrentPrices(); // ⬅️ Huidige prijzen updaten naar minimum
-      } else if (data.message === "recovery") {
-        console.log("🔁 Beurscrash beëindigd");
-        setCrashMode(false);
-        fetchCurrentPrices(); // ⬅️ Huidige prijzen updaten naar gemiddelde
-      } else {
-        fetchPriceHistory();
-        fetchCurrentPrices();
-      }
-    };
-
-    socket.onclose = () => {
-      console.log("❌ WebSocket verbinding gesloten.");
-    };
+    connect();
 
     return () => {
+      clearTimeout(reconnectTimeout);
+      socket.onclose = null;
       socket.close();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 📈 Haal de prijsgeschiedenis op voor de grafiek
@@ -100,7 +112,10 @@ function GraphPanel() {
 
   // 📊 Prijsgeschiedenis verwerken voor de grafiek
   const processPriceHistory = (data) => {
-    if (data.length === 0) return;
+    if (data.length === 0) {
+      setPriceHistory([]);
+      return;
+    }
 
     const sortedData = data.sort(
       (a, b) => new Date(a.datumtijd) - new Date(b.datumtijd)
@@ -224,7 +239,7 @@ function GraphPanel() {
                 {item.foto} {item.naam}
               </td>
               <td style={{ border: "none", padding: "10px" }}>
-                {Math.round(item.huidigeprijs / 0.5)} bonnen
+                {Math.round(item.huidigeprijs / prijsPerBon)} bonnen
               </td>
             </tr>
           ))}

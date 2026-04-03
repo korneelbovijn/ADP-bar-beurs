@@ -14,19 +14,31 @@ function AdminPanel() {
 
     useEffect(() => {
       fetchBarItems();
-  
-      socketRef.current = new WebSocket(process.env.REACT_APP_WS_URL);
-  
-      socketRef.current.onopen = () => {
+
+      let reconnectTimeout;
+
+      const connect = () => {
+        const socket = new WebSocket(process.env.REACT_APP_WS_URL);
+        socketRef.current = socket;
+
+        socket.onopen = () => {
           console.log("📡 WebSocket verbonden met server");
+        };
+
+        socket.onclose = () => {
+          console.log("❌ WebSocket gesloten. Herverbinden in 3s...");
+          reconnectTimeout = setTimeout(connect, 3000);
+        };
       };
-  
-      socketRef.current.onclose = () => {
-          console.log("❌ WebSocket gesloten");
-      };
-  
+
+      connect();
+
       return () => {
+        clearTimeout(reconnectTimeout);
+        if (socketRef.current) {
+          socketRef.current.onclose = null;
           socketRef.current.close();
+        }
       };
   }, []);
   
@@ -90,6 +102,20 @@ function AdminPanel() {
             .catch(error => console.error("❌ Fout bij het updaten van prijzen:", error));
     };
 
+    const resetGeschiedenis = () => {
+        if (!window.confirm("Weet je zeker dat je de volledige prijsgeschiedenis wilt wissen?")) return;
+        axios.post(`${process.env.REACT_APP_API_URL}/api/reset/geschiedenis`)
+            .then(() => alert("✅ Geschiedenis gewist"))
+            .catch(error => console.error("Fout:", error));
+    };
+
+    const resetPrijzen = () => {
+        if (!window.confirm("Weet je zeker dat je alle prijzen wilt resetten naar de startprijzen?")) return;
+        axios.post(`${process.env.REACT_APP_API_URL}/api/reset/prijzen`)
+            .then(() => { alert("✅ Prijzen gereset"); fetchBarItems(); })
+            .catch(error => console.error("Fout:", error));
+    };
+
     const toggleAvailability = (id, newStatus) => {
         axios.patch(`${process.env.REACT_APP_API_URL}/api/baritems/${id}/availability`, { available: newStatus })
           .then(() => fetchBarItems())
@@ -137,6 +163,14 @@ function AdminPanel() {
               style={{ marginBottom: "10px", padding: "10px", marginLeft: "10px", backgroundColor: "red", color: "white" }}
             >
               💥 Beurscrash
+            </button>
+
+            <button onClick={resetPrijzen} style={{ marginBottom: "10px", padding: "10px", marginLeft: "10px", backgroundColor: "orange", color: "white" }}>
+              🔄 Reset prijzen
+            </button>
+
+            <button onClick={resetGeschiedenis} style={{ marginBottom: "10px", padding: "10px", marginLeft: "10px", backgroundColor: "gray", color: "white" }}>
+              🗑️ Wis geschiedenis
             </button>
 
 

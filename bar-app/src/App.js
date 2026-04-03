@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
+const prijsPerBon = parseFloat(process.env.REACT_APP_EURO_PER_KAART) / parseFloat(process.env.REACT_APP_BONNEN_PER_KAART);
+
 function App() {
   const [barItems, setBarItems] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
@@ -8,23 +10,32 @@ function App() {
   useEffect(() => {
     fetchBarItems();
 
-    // 📡 WebSocket verbinding maken
-    const socket = new WebSocket(process.env.REACT_APP_WS_URL);
+    let socket;
+    let reconnectTimeout;
 
-    socket.onopen = () => {
-      console.log("📡 WebSocket verbonden!");
+    const connect = () => {
+      socket = new WebSocket(process.env.REACT_APP_WS_URL);
+
+      socket.onopen = () => {
+        console.log("📡 WebSocket verbonden!");
+      };
+
+      socket.onmessage = (event) => {
+        console.log("🔄 Prijzen zijn bijgewerkt via WebSocket!");
+        fetchBarItems();
+      };
+
+      socket.onclose = () => {
+        console.log("❌ WebSocket verbinding gesloten. Herverbinden in 3s...");
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
     };
 
-    socket.onmessage = (event) => {
-      console.log("🔄 Prijzen zijn bijgewerkt via WebSocket!");
-      fetchBarItems(); // Herlaad barItems (prijsupdates)
-    };
-
-    socket.onclose = () => {
-      console.log("❌ WebSocket verbinding gesloten.");
-    };
+    connect();
 
     return () => {
+      clearTimeout(reconnectTimeout);
+      socket.onclose = null;
       socket.close();
     };
   }, []);
@@ -109,7 +120,7 @@ function App() {
 
   const totaalBonnen = selectedItems.reduce(
     (acc, item) =>
-      acc + item.Aantal * Math.round(Number(item.VerkoopPrijs) / 0.5),
+      acc + item.Aantal * Math.round(Number(item.VerkoopPrijs) / prijsPerBon),
     0
   );
 
@@ -136,7 +147,7 @@ function App() {
             
           >
             <span style={{ fontSize: "2rem" }}>{item.foto}</span> {item.naam} (
-            {Math.round(Number(item.LaatstePrijs) / 0.5)} bonnen)
+            {Math.round(Number(item.LaatstePrijs) / prijsPerBon)} bonnen)
           </button>
         ))}
       </div>
@@ -150,7 +161,7 @@ function App() {
                 <li key={index} style={{ fontSize: "1rem" }}>
                   <span style={{ fontSize: "2rem" }}>{barItem?.foto}</span>{" "}
                   {barItem?.naam} (
-                  {Math.round(Number(barItem?.LaatstePrijs) / 0.5)} bonnen ) x{item.Aantal}
+                  {Math.round(Number(barItem?.LaatstePrijs) / prijsPerBon)} bonnen ) x{item.Aantal}
                 </li>
               );
             })}

@@ -4,6 +4,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const cron = require("node-cron");
 const WebSocket = require("ws");
+const { barItems: configItems } = require("./config");
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -42,8 +43,6 @@ async function updatePrices(updateHuidigePrijs = false) {
   }
 
   try {
-    const verkoopTijdspanne = 30; // Laatste 30 minuten
-
     // Stap 1: Haal verkoopgegevens van de laatste X minuten op
     const verkopen = await pool.query(`
             SELECT bi.id, COALESCE(SUM(bvi.aantal), 0) AS totaal_verkocht
@@ -54,7 +53,7 @@ async function updatePrices(updateHuidigePrijs = false) {
               JOIN barverkoop b ON bvi.barverkoop_id = b.id
               WHERE b.datumtijd >= NOW() - INTERVAL '${priceCalculationDelayMin} minutes'
             ) bvi ON bi.id = bvi.baritem_id
-            WHERE bi.available = true AND bi.naam != 'Frisdrank'
+            WHERE bi.available = true AND bi.minimumprijs < bi.maximumprijs
             GROUP BY bi.id
             ORDER BY totaal_verkocht ASC;
 
@@ -64,7 +63,7 @@ async function updatePrices(updateHuidigePrijs = false) {
     const verkochteItems = verkopen.rows;
     if (verkochteItems.length === 0) {
       console.log(
-        "⚠️ Geen verkopen in de laatste 30 minuten. Prijzen blijven ongewijzigd."
+        "⚠️ Geen beschikbare items gevonden. Prijzen blijven ongewijzigd."
       );
       return;
     }
@@ -75,7 +74,7 @@ async function updatePrices(updateHuidigePrijs = false) {
     const huidigePrijzen = await pool.query(`
             SELECT id, naam, minimumprijs, maximumprijs, huidigeprijs as laatsteprijs 
             FROM baritem
-            WHERE available = true AND naam != 'Frisdrank'
+            WHERE available = true AND minimumprijs < maximumprijs
 
 
         `);
@@ -449,6 +448,56 @@ app.get("/api/beursstatus", async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Fout bij ophalen beursstatus");
+  }
+});
+
+// 📌 Wis de prijsgeschiedenis
+app.post("/api/reset/geschiedenis", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM baritemprijsdetail");
+    await pool.query("DELETE FROM baritemprijs");
+    console.log("🗑️  Prijsgeschiedenis gewist");
+    sendWebSocketUpdate();
+    res.status(200).json({ message: "Geschiedenis gewist" });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Fout bij wissen geschiedenis");
+  }
+});
+
+// 📌 Reset prijzen naar startprijzen uit config
+app.post("/api/reset/prijzen", async (req, res) => {
+  try {
+    // Zet huidigeprijs terug naar startprijs
+    for (const item of configItems) {
+      await pool.query(
+        "UPDATE baritem SET huidigeprijs = $1 WHERE LOWER(naam) = LOWER($2)",
+        [item.startPrijs, item.naam]
+      );
+    }
+
+    // Schrijf een initieel snapshot in de geschiedenis
+    const prijsSet = await pool.query(
+      "INSERT INTO baritemprijs (datumtijd) VALUES (NOW()) RETURNING id"
+    );
+    const prijsSetID = prijsSet.rows[0].id;
+
+    const alleItems = await pool.query(
+      "SELECT id, huidigeprijs FROM baritem WHERE available = true"
+    );
+    for (const item of alleItems.rows) {
+      await pool.query(
+        "INSERT INTO baritemprijsdetail (baritem_id, prijs, baritemprijs_id) VALUES ($1, $2, $3)",
+        [item.id, item.huidigeprijs, prijsSetID]
+      );
+    }
+
+    console.log("💰 Prijzen gereset naar startprijzen + initieel snapshot aangemaakt");
+    sendWebSocketUpdate();
+    res.status(200).json({ message: "Prijzen gereset" });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Fout bij resetten prijzen");
   }
 });
 
