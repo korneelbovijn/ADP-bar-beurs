@@ -78,7 +78,7 @@ echo "      dnsmasq gestart."
 
 # --- .env bestanden bijwerken ---
 echo "[6/9] .env bestanden bijwerken met IP $PI_IP..."
-for app in bar-app bar-admin; do
+for app in bar-app bar-admin bar-visual bar-management; do
   ENV_FILE="$SCRIPT_DIR/$app/.env"
   if [ -f "$ENV_FILE" ]; then
     sed -i "s|REACT_APP_API_URL=.*|REACT_APP_API_URL=http://${PI_IP}:5000|" "$ENV_FILE"
